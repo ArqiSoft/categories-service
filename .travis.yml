@@ -1,0 +1,25 @@
+services:
+  - docker
+
+branches:
+  only:
+    - master
+
+os:
+  - linux
+
+env:
+  global:
+    - DATE=`TZ=America/New_York date "+%Y-%m-%d-%H%M"`
+    - DOCKER_IMAGE="leanda/categories-service"
+    - DOCKER_TESTS_IMAGE="leanda/categories-service-tests"
+
+script:
+  - docker build -t $DOCKER_IMAGE:$DATE -t $DOCKER_IMAGE:latest -f Leanda.Categories.Processing/Dockerfile .
+  - docker build -t $DOCKER_TESTS_IMAGE:latest -f Leanda.Categories.Tests/Dockerfile .
+  # - yes | cp -rf Leanda.Categories.Tests/.env.travis-ci Leanda.Categories.Tests/.env
+  # - cd Leanda.Categories.Tests && docker-compose up --abort-on-container-exit
+
+after_success:
+  - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
+  - docker push $DOCKER_IMAGE # Pushes both date and latest
