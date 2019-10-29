@@ -1,4 +1,4 @@
-FROM microsoft/dotnet:2.1-sdk AS build-env
+FROM mcr.microsoft.com/dotnet/core/sdk:3.0 AS build-env
 
 ARG RID=linux-x64
 
@@ -13,7 +13,7 @@ COPY Leanda.Categories.Tests Leanda.Categories.Tests
 RUN dotnet publish Leanda.Categories.Tests/Leanda.Categories.Tests.csproj -r $RID -c Release -o /dist
 
 # Build runtime image
-FROM microsoft/dotnet:2.1-sdk
+FROM mcr.microsoft.com/dotnet/core/runtime-deps:3.0
 
 LABEL maintainer="rick.zakharov@arqisoft.com"
 
