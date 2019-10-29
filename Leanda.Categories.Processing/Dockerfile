@@ -1,21 +1,21 @@
 # Use SDK image to build solution
-FROM microsoft/dotnet:2.1-sdk AS build-env
+FROM mcr.microsoft.com/dotnet/core/sdk:3.0 AS build-env
 
 ARG RID=linux-x64
 
 WORKDIR /build
 
-COPY . .
+COPY Leanda.Categories.Processing Leanda.Categories.Processing/
 
-RUN dotnet restore Leanda.Categories.Processing.csproj
+RUN dotnet restore Leanda.Categories.Processing/Leanda.Categories.Processing.csproj
 
-RUN dotnet publish Leanda.Categories.Processing.csproj -r $RID -o /dist
+RUN dotnet publish Leanda.Categories.Processing/Leanda.Categories.Processing.csproj -r $RID -o /dist
 
 # RUN apt-get update && apt-get install -y --no-install-recommends apt-utils
 # RUN apt-get install -y libunwind8
 
 # Build runtime image
-FROM microsoft/dotnet:2.1-runtime-deps
+FROM mcr.microsoft.com/dotnet/core/runtime-deps:3.0
 
 LABEL maintainer="rick.zakharov@gmail.com"
 
