@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Leanda.Categories.Domain.Commands
 {
-    public interface AddCategoriesToEntity : CorrelatedBy<Guid>
+    public interface AddEntityCategories : CorrelatedBy<Guid>
     {
         Guid Id { get; }
         List<Guid> CategoriesIds { get; set; }
