@@ -34,10 +34,11 @@ namespace Leanda.Categories.Processing.EventHandlers
         {
             try
             {
-                var hits = _elasticClient.Search<dynamic>(s => s
+                var result = _elasticClient.Search<dynamic>(s => s
                     .Index("categories")
                     .Type("category")
-                    .Query(q => q.QueryString(qs => qs.Query(context.Message.Id.ToString())))).Hits;
+                    .Query(q => q.QueryString(qs => qs.Query(context.Message.EntityId.ToString()))));
+                var hits = result.Hits;
                 if (hits.Any())
                 {
                     JObject hitObject = JsonConvert.DeserializeObject<JObject>(hits.First().Source.ToString());
@@ -49,8 +50,8 @@ namespace Leanda.Categories.Processing.EventHandlers
                 }
                 else
                 {
-                    var node = await _nodesCollection.Find(new BsonDocument("_id", context.Message.Id)).FirstOrDefaultAsync()
-                        ?? throw new NullReferenceException("Cannot find the Node by id: " + context.Message.Id);
+                    var node = await _nodesCollection.Find(new BsonDocument("_id", context.Message.EntityId)).FirstOrDefaultAsync()
+                        ?? throw new NullReferenceException("Cannot find the Node by id: " + context.Message.EntityId);
 
                     var insertDocument = new { CategoriesIds = context.Message.CategoriesIds.Distinct(), Node = node };
                     var status = await _elasticClient.IndexAsync<dynamic>(insertDocument,
@@ -69,13 +70,13 @@ namespace Leanda.Categories.Processing.EventHandlers
         {
             try
             {
-                var node = await _nodesCollection.Find(new BsonDocument("_id", context.Message.Id)).FirstOrDefaultAsync()
-                    ?? throw new NullReferenceException("Cannot find the Node by id: " + context.Message.Id);
+                var node = await _nodesCollection.Find(new BsonDocument("_id", context.Message.EntityId)).FirstOrDefaultAsync()
+                    ?? throw new NullReferenceException("Cannot find the Node by id: " + context.Message.EntityId);
 
                 var result = _elasticClient.Search<dynamic>(s => s
                     .Index("categories")
                     .Type("category")
-                    .Query(q => q.QueryString(qs => qs.Query(context.Message.Id.ToString()))));
+                    .Query(q => q.QueryString(qs => qs.Query(context.Message.EntityId.ToString()))));
 
                 foreach (var hit in result.Hits)
                 {
@@ -94,14 +95,6 @@ namespace Leanda.Categories.Processing.EventHandlers
                         await _elasticClient.DeleteAsync(new DeleteRequest("categories", "category", hit.Id));
                     }
                 }
-
-
-                //context.Message.CategoriesIds.ForEach(async categoryId =>
-                //{
-                //    var indexDocument = new { CategoryId = categoryId, Node = node };
-                //    var status = await _elasticClient.DeleteAsync<dynamic>(indexDocument,
-                //        i => i.Index("categories").Type("category"));
-                //});
                 Log.Information($"Document index created for categories: {context.Message.CategoriesIds.ToJson()}");
             }
             catch (ElasticsearchClientException e)

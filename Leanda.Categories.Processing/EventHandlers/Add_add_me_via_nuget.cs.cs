@@ -7,7 +7,8 @@ namespace Leanda.Categories.Domain.Commands
     public interface AddEntityCategories : CorrelatedBy<Guid>
     {
         Guid Id { get; }
-        List<Guid> CategoriesIds { get; set; }
+        Guid EntityId { get; }
+        List<Guid> CategoriesIds { get; }
         Guid UserId { get; }
     }
 }
