@@ -43,7 +43,7 @@ namespace Leanda.Categories.Processing
                 createIndexRequest = new CreateIndexDescriptor(indexName)
                     .Mappings(s => s
                         .Map(typeName, tm => tm
-                            .Properties(p => p.Keyword(k => k.Name("CategoryId")))
+                            .Properties(p => p.Keyword(k => k.Name("CategoriesIds")))
                             .Properties(p => p.Object<dynamic>(f => f.Name("Node")
                                 .Properties(np => np.Keyword(t => t.Name("id")))))
                             ));

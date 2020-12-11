@@ -10,10 +10,12 @@ using MongoDB.Bson;
 using System.Dynamic;
 using Newtonsoft.Json;
 using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json.Linq;
 
 namespace Leanda.Categories.Processing.EventHandlers
 {
-    public class CategoryEntitiesHandlers : IConsumer<AddCategoriesToEntity>
+    public class CategoryEntitiesHandlers : IConsumer<AddEntityCategories>, IConsumer<DeleteEntityCategories>
     {
         IElasticClient _elasticClient;
         private readonly IMongoDatabase _database;
@@ -28,18 +30,34 @@ namespace Leanda.Categories.Processing.EventHandlers
                 ?? throw new NullReferenceException("Cannot get the Nodes collection");
         }
 
-        public async Task Consume(ConsumeContext<AddCategoriesToEntity> context)
+        public async Task Consume(ConsumeContext<AddEntityCategories> context)
         {
             try
             {
-                var node = await _nodesCollection.Find(new BsonDocument("_id", context.Message.Id)).FirstOrDefaultAsync()
-                    ?? throw new NullReferenceException("Cannot find the Node by id: " + context.Message.Id);
-                context.Message.CategoriesIds.ForEach(async categoryId =>
+                var result = _elasticClient.Search<dynamic>(s => s
+                    .Index("categories")
+                    .Type("category")
+                    .Query(q => q.QueryString(qs => qs.Query(context.Message.EntityId.ToString()))));
+                var hits = result.Hits;
+                if (hits.Any())
                 {
-                    var indexDocument = new { CategoryId = categoryId, Node = node };
-                    var status = await _elasticClient.IndexAsync<dynamic>(indexDocument,
+                    JObject hitObject = JsonConvert.DeserializeObject<JObject>(hits.First().Source.ToString());
+                    IEnumerable<string> categoriesIds = hitObject.Value<JArray>("CategoriesIds").Select(x => x.ToString());
+                    categoriesIds = categoriesIds.Union(context.Message.CategoriesIds.Select(x => x.ToString()));
+                    var patchDocument = new { CategoriesIds = categoriesIds };
+                    await _elasticClient.UpdateAsync<dynamic>(hits.First().Id,
+                         i => i.Doc(patchDocument).Index("categories").Type("category"));
+                }
+                else
+                {
+                    var node = await _nodesCollection.Find(new BsonDocument("_id", context.Message.EntityId)).FirstOrDefaultAsync()
+                        ?? throw new NullReferenceException("Cannot find the Node by id: " + context.Message.EntityId);
+
+                    var insertDocument = new { CategoriesIds = context.Message.CategoriesIds.Distinct(), Node = node };
+                    var status = await _elasticClient.IndexAsync<dynamic>(insertDocument,
                         i => i.Index("categories").Type("category"));
-                });
+                }
+
                 Log.Information($"Document index created. Categories are: {context.Message.CategoriesIds.ToJson()}");
             }
             catch (ElasticsearchClientException e)
@@ -48,33 +66,35 @@ namespace Leanda.Categories.Processing.EventHandlers
             }
         }
 
-        public async Task Consume(ConsumeContext<DeleteCategoriesFromEntity> context)
+        public async Task Consume(ConsumeContext<DeleteEntityCategories> context)
         {
             try
             {
-                var node = await _nodesCollection.Find(new BsonDocument("_id", context.Message.Id)).FirstOrDefaultAsync()
-                    ?? throw new NullReferenceException("Cannot find the Node by id: " + context.Message.Id);
+                var node = await _nodesCollection.Find(new BsonDocument("_id", context.Message.EntityId)).FirstOrDefaultAsync()
+                    ?? throw new NullReferenceException("Cannot find the Node by id: " + context.Message.EntityId);
 
-                var result = _elasticClient.Search<dynamic>(s => s 
-                .Index("categories")
-                .Type("category")
-                .Query(q => q.QueryString(qs => qs.Query(context.Message.Id.ToString()))));
+                var result = _elasticClient.Search<dynamic>(s => s
+                    .Index("categories")
+                    .Type("category")
+                    .Query(q => q.QueryString(qs => qs.Query(context.Message.EntityId.ToString()))));
 
                 foreach (var hit in result.Hits)
                 {
-                    var categoriesIds = JsonConvert.DeserializeObject<List<string>>(hit.Source.CategoriesIds);
-                    var indexDocument = new { CategoriesIds = categoriesIds};
-                    _elasticClient.UpdateAsync<dynamic>(indexDocument,
-                        i => i.Index("categories").Type("category"));
+                    JObject hitObject = JsonConvert.DeserializeObject<JObject>(hit.Source.ToString());
+                    IEnumerable<string> categoriesIds = hitObject.Value<JArray>("CategoriesIds").Select(x => x.ToString());
+                    categoriesIds = categoriesIds.Where(x => !context.Message.CategoriesIds.Select(z => z.ToString()).Contains(x));
+
+                    if (categoriesIds.Any())
+                    {
+                        var indexDocument = new { CategoriesIds = categoriesIds.Distinct() };
+                        await _elasticClient.UpdateAsync<dynamic>(hit.Id,
+                             i => i.Doc(indexDocument).Index("categories").Type("category"));
+                    }
+                    else
+                    {
+                        await _elasticClient.DeleteAsync(new DeleteRequest("categories", "category", hit.Id));
+                    }
                 }
-
-
-                //context.Message.CategoriesIds.ForEach(async categoryId =>
-                //{
-                //    var indexDocument = new { CategoryId = categoryId, Node = node };
-                //    var status = await _elasticClient.DeleteAsync<dynamic>(indexDocument,
-                //        i => i.Index("categories").Type("category"));
-                //});
                 Log.Information($"Document index created for categories: {context.Message.CategoriesIds.ToJson()}");
             }
             catch (ElasticsearchClientException e)
